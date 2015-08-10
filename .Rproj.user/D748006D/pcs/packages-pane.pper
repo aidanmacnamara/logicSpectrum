@@ -1,7 +1,0 @@
-{
-    "installOptions" : {
-        "installDependencies" : true,
-        "installFromRepository" : false,
-        "libraryPath" : "C:/Users/am673712/Documents/R/win-library/3.1"
-    }
-}
