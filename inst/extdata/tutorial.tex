@@ -1,0 +1,23 @@
+\documentclass{article}
+
+\title{In Silico Systems Biology: Scripting with CellNOptR}
+\author{Aidan MacNamara}
+
+\usepackage{Sweave}
+\begin{document}
+\input{tutorial-concordance}
+\maketitle
+
+\tableofcontents
+
+\section{Background}
+
+CellNOptR is a software package that trains the topology of a PSN to experimental data by the criterion of minimizing the error between the data and the logic model created from the PSN. In CellNOptR, the starting network based on prior knowledge is called the Prior Knowledge Network (PKN). This PKN is preprocessed before training by compression and expansion. The compression step of CellNOptR is a method of reducing the complexity of a logic model by removing nodes that have no effect on the outcome of simulation. The expansion step subsequently includes all possible hyperedges in the model. The model is trained by minimizing a bipartite function that calculates the mismatch between the logic model and experimental data (mean squared error) while penalizing model size. This minimization can be solved using different strategies, from simple enumeration of options for small cases, to stochastic optimization algorithms such as genetic algorithms.
+
+The R version is available on Bioconductor and has a number of added features that allows the user to run different variations of logic modeling within the same framework of model calibration. These variations include steady state to discrete time Boolean modeling, fuzzy logic and logic ODEs, all of which will be discussed in turn below.
+
+
+\section{Preprocessing}
+
+First off, load the necessary libraries, these can be downloaded from Bioconductor, using:
+

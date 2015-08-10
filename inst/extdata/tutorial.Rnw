@@ -1,0 +1,180 @@
+\documentclass{article}
+
+\title{In Silico Systems Biology: Scripting with CellNOptR}
+\author{Aidan MacNamara}
+
+\begin{document}
+\SweaveOpts{concordance=TRUE}
+\maketitle
+
+\tableofcontents
+
+\section{Background}
+
+CellNOptR is a software package that trains the topology of a PSN to experimental data by the criterion of minimizing the error between the data and the logic model created from the PSN. In CellNOptR, the starting network based on prior knowledge is called the Prior Knowledge Network (PKN). This PKN is preprocessed before training by compression and expansion. The compression step of CellNOptR is a method of reducing the complexity of a logic model by removing nodes that have no effect on the outcome of simulation. The expansion step subsequently includes all possible hyperedges in the model. The model is trained by minimizing a bipartite function that calculates the mismatch between the logic model and experimental data (mean squared error) while penalizing model size. This minimization can be solved using different strategies, from simple enumeration of options for small cases, to stochastic optimization algorithms such as genetic algorithms.
+
+The R version is available on Bioconductor and has a number of added features that allows the user to run different variations of logic modeling within the same framework of model calibration. These variations include steady state to discrete time Boolean modeling, fuzzy logic and logic ODEs, all of which will be discussed in turn below.
+
+<<Ropts, echo=FALSE>>=
+options(width=50, message=FALSE, warning=FALSE)
+@
+
+\section{Preprocessing}
+
+First off, load the necessary libraries, these can be downloaded from Bioconductor, using:
+
+<<bioconductor, eval=FALSE, results='hide'>>=
+source("http://bioconductor.org/biocLite.R")
+biocLite("Package Name")
+@
+
+<<loadLib, eval=TRUE, echo=TRUE, message=FALSE>>=
+library(CellNOptR)
+library(CNORdt)
+library(CNORode)
+library(CNORfuzzy)
+@
+
+\noindent Then, create a directory where you can perform your analysis, then set it as your working directory.
+
+<<newDir, eval=FALSE>>=
+dir.create("CNOR_analysis")
+setwd("CNOR_analysis")
+@
+
+\noindent To illustrate the variety of logic modeling approaches, we will use an imaginary but biologically plausible prior knowledge network (PKN). This network includes a subset of intracellular signaling networks known to be activated downstream of EGF and TNF stimulation. This is loaded as `ModelPB':
+
+<<getModel, eval=TRUE>>=
+data(modelPB, package="CNORdt")
+@
+
+\noindent The in silico data replicates biologically plausible behavior that has been seen in such networks, such as the transient behavior of ERK activation and the oscillatory dynamics of NF$\kappa$B translocation from the cytoplasm to the nucleus. This is loaded as `CNOlistPB':
+
+<<getData, eval=TRUE>>=
+data(CNOlistPB, package="CNORdt")
+@
+
+\noindent A CNOlist is the central data object of CellNOptR and the add-on packages below. It is the object that contains measurements of elements of a prior knowledge network under different combinations of perturbations of other nodes in the network. A CNOlist comprises the following fields: namesSignals, namesCues, namesStimuli and namesInhibitors, which are vectors holding the names of the measured, stimulated and inhibited species respectively. The fields valueCues (and its derivatives valueStimuli and valueInhibitors) are boolean matrices that contain for each condition (row) a 1 when the corresponding cue (column) is present, and a zero otherwise. You can have a look at your data and the CNOlist format by typing:
+
+<<showCNO, eval=TRUE, results='hide'>>=
+CNOlistPB
+@
+
+\noindent The data can also be visualized using:
+
+<<plotCNO>>=
+plotCNOlist(CNOlistPB)
+@
+
+\noindent The full details of preprocessing the model can be found in the \emph{CellNOptR} package (the vignette gives a comprehensive explanation):
+
+<<SSVignette, eval=FALSE>>=
+browseVignettes(package="CellNOptR")
+@
+
+<<preprocess>>=
+model = preprocessing(CNOlistPB, modelPB)
+plotModel(model)
+@
+
+\section{Steady State}
+
+This is essentially the same example as seen for CytoCopteR. With the \emph{in silico} data as our starting point, the PKN is trained using the steady state model formalism at $t_1 = 10$ minutes.
+
+<<optimizeSS, eval=FALSE>>=
+# what time point is 'steady state' in the data?
+t = 10
+CNOlistSS = CNOlistPB
+tIndex = which(CNOlistSS$timeSignals == t)
+# make a new CNOlist with a single measurement time point
+CNOlistSS$timeSignals = c(0,t)
+CNOlistSS$valueSignals = list(t0=CNOlistPB$valueSignals[[1]],
+CNOlistPB$valueSignals[[tIndex]])
+
+opt1 <- gaBinaryT1(CNOlist=CNOlistSS, model=model,
+verbose=FALSE, maxTime=60)
+
+cutAndPlot(CNOlistSS, model, bStrings=list(opt1$bString))
+@
+
+\section{Two time points (or additional steady state)}
+
+It is quite common in signaling networks to observe a transient behavior where a species is quickly activated and subsequently deactivated. Such a dynamic obviously can not be captured with a steady state approach where only one time point is considered. Therefore in the above section, this issue was avoided by only modeling ``fast events'' i.e.~the activation phase of the signal propagation. However, when information about more than one time point is available and such a fast activation followed by slow deactivation (or indeed any combination of slower and faster processes) is observed, then it is possible to also capture these processes while keeping the simplifying assumption of steady states. In essence, it is assumed that multiple pseudo-steady states reflect the mechanisms that are acting at different time scales and they can be optimized independently. We will illustrate this with the CellNOptR implementation for two time scales, but the approach is extendable to more than two time points.
+
+<<optimize2SS, eval=FALSE>>=
+t = c(10,30)
+CNOlistSS2 = CNOlistPB
+tIndex = which(CNOlistSS2$timeSignals == t[1])
+tIndex[2] = which(CNOlistSS2$timeSignals == t[2])
+
+# make a new CNOlist with 2 time points
+CNOlistSS2$timeSignals = c(0,t)
+CNOlistSS2$valueSignals = list(t0=CNOlistPB$valueSignals[[1]],
+                               CNOlistPB$valueSignals[[tIndex[1]]],
+                               CNOlistPB$valueSignals[[tIndex[2]]])
+
+opt2a <- gaBinaryT1(CNOlist=CNOlistSS2, model=model, maxTime=60, verbose=FALSE)
+
+# optimise T2
+opt2b <- gaBinaryT2(CNOlist=CNOlistSS2, bStringT1=opt2a$bString,
+                    model=model, maxTime=60, verbose=FALSE)
+
+cutAndPlot(CNOlistSS2, model, list(opt2a$bString, opt2b$bString))
+@
+
+\section{Synchronous multiple time point simulation with CNORdt}
+
+CNORdt introduces some variation in how time is handled in the model. Instead of simulating and fitting data at steady states, it is capable of fitting time course data by using an additional model parameter together with a synchronous updating scheme.\\
+
+\noindent CNORdt introduces a scaling parameter that defines the time scale of the Boolean synchronous simulation. Where each ``tick'' ($t$) (or simulation step) is the synchronous updating of all nodes in the model according to their inputs at $t-1$, the scaling parameter defines the ``tick'' frequency relative to the time scale of the real data. Although this is a crude approach (i.e.~it implies a single rate across all reactions), it allows us to fit a synchronous Boolean simulation to data. Hence, all data points can be fitted to the model and hyperedges that cause feedback in the model can be included, which allows the model to reveal more complex dynamics such as oscillations.\\
+
+\noindent More information can be found in the Bioconductor vignette:
+
+<<discreteTimeVignette, eval=FALSE>>=
+browseVignettes(package="CNORdt")
+@
+
+\noindent The following is an example using CNORdt:
+
+<<discreteTime, eval=FALSE>>=
+opt3 <- gaBinaryDT(CNOlist=CNOlistPB, model=model, boolUpdates=30,
+                   maxTime=60, lowerB=0.8, upperB=10)
+
+cutAndPlotResultsDT(CNOlist=CNOlistPB, bString=opt3$bString, model=model,
+                    boolUpdates=30, lowerB=0.8, upperB=10)
+@
+
+\section{Constrained fuzzy logic with CNORfuzzy}
+
+Fuzzy logic is another logic modeling formalism that allows for intermediate levels of activation. Briefly, the relationships (or transfer functions) between nodes in CNORfuzzy are limited to Hill functions. Hence, each transfer function has 2 free parameters: the Hill coefficient $n$, which controls the steepness of the function, and the sensitivity parameter $k$, which determines the midpoint of the function (i.e.~the value of the input that produces half the maximal output). By varying these 2 parameters, linear, sigmoidal and step-like dynamics can be produced that are good approximations to protein-protein interactions and enzymatic reactions. Full details can be found by the searching for the vignette in R:
+
+<<cFLVignette, eval=FALSE>>=
+browseVignettes(package="CNORfuzzy")
+@
+
+\noindent The following wrapper function finds the optimized model:
+
+<<cFL, eval=FALSE>>=
+# run the wrapper first
+optCFL = CNORwrapFuzzy(data=CNOlistSS, model=model)
+
+# summarize results
+summary = compileMultiRes(list(optCFL), show=TRUE)
+
+# plot
+plotMeanFuzzyFit(0.001, summary$allFinalMSEs, list(optCFL))
+@
+
+\section{Logic ODEs with CNORode}
+
+\noindent CNORode allows for continuous states and time by encoding the logic model as a set of ODEs. The transfer functions between nodes are Hill functions that allow for a wide variety of dynamics (to obtain a good fit to data, you may need to increase the number of optimization iterations: `iters'):
+
+<<ode, eval=FALSE>>=
+initParams = createLBodeContPars(model, random=TRUE)
+odeParams = parEstimationLBodeGA(CNOlistPB, model, initParams, iters=100)
+
+# plot
+plotLBodeFitness(CNOlistPB, model, odeParams)
+@
+
+\end{document}

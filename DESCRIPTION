@@ -1,0 +1,10 @@
+Package: logicSpectrum
+Type: Package
+Title: Accompanying code and tutorial to "State-time spectrum of signal transduction logic models"
+Version: 0.1
+Date: 2015-08-09
+Author: Aidan MacNamara
+Maintainer: Aidan MacNamara <aidan.macnamara@gmail.com	>
+Description: MacNamara, A., Terfve, C., Henriques, D., Bernabé, B. P., & Saez-Rodriguez, J. (2012). State-time spectrum of signal transduction logic models. Physical Biology, 9(4), 045003. http://doi.org/10.1088/1478-3975/9/4/045003
+License: What license is it under?
+LazyData: TRUE
